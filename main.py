@@ -3,9 +3,12 @@ from groq import Groq
 import base64
 from io import BytesIO
 
+# Attempt to import pdf2image for PDF conversion.
+try:
+    from pdf2image import convert_from_bytes
+except ImportError:
+    st.error("The pdf2image library is required to process PDF files. Install it with 'pip install pdf2image'.")
 
-# If you use PDF conversion, install pdf2image: pip install pdf2image
-# Also, ensure Poppler is installed (e.g., on Ubuntu: sudo apt-get install poppler-utils)
 
 def prepare_resume_image(file_bytes, ext):
     """
@@ -15,10 +18,9 @@ def prepare_resume_image(file_bytes, ext):
     """
     if ext.endswith('.pdf'):
         try:
-            from pdf2image import convert_from_bytes
             images = convert_from_bytes(file_bytes)
             if images:
-                # Take the first page and convert to JPEG
+                # Convert the first page to JPEG format.
                 image = images[0]
                 buffer = BytesIO()
                 image.save(buffer, format="JPEG")
@@ -103,26 +105,42 @@ def generate_cover_letter(resume_text, job_description, industry, tone):
 
 
 def main():
-    st.title("Cover Letter Generator from Resume (Vision-Powered with PDF Support)")
+    # --- Sidebar Settings for Theme & Template Selection ---
+    st.sidebar.header("Settings")
+    theme = st.sidebar.selectbox("Choose Theme", ["Light", "Dark"])
+    template_choice = st.sidebar.selectbox("Cover Letter Template", ["Classic", "Modern", "Creative"])
+
+    # Apply a simple dark theme styling if chosen.
+    if theme == "Dark":
+        st.markdown(
+            """
+            <style>
+            body { background-color: #333; color: white; }
+            .css-18e3th9 { background-color: #333 !important; color: white !important; }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.title("Cover Letter Generator from Resume")
     st.write(
         "Upload your resume (as an image or PDF) and provide the job details. "
-        "The application will extract your resume text automatically and generate a tailored cover letter."
+        "The application will extract your resume text automatically and generate a tailored cover letter. "
+        "You can choose different templates and themes for a personalized experience."
     )
 
-    # --- Step 1: Resume Upload and Extraction ---
+    # --- Step 1: Resume Upload & Extraction ---
     st.subheader("Step 1: Upload Your Resume")
     uploaded_file = st.file_uploader("Upload your Resume (PNG, JPG, JPEG, or PDF)", type=["png", "jpg", "jpeg", "pdf"])
 
     extracted_resume_text = ""
     if uploaded_file is not None:
-        # Read the file bytes
         file_bytes = uploaded_file.read()
         ext = uploaded_file.name.lower()
 
-        # Display the resume preview
+        # Preview the uploaded file.
         if ext.endswith('.pdf'):
             try:
-                from pdf2image import convert_from_bytes
                 images = convert_from_bytes(file_bytes)
                 if images:
                     st.image(images[0], caption="First page of your PDF Resume", use_column_width=True)
@@ -133,7 +151,7 @@ def main():
         else:
             st.image(BytesIO(file_bytes), caption="Uploaded Resume", use_column_width=True)
 
-        # Prepare base64-encoded image for extraction
+        # Prepare a base64-encoded image.
         base64_image = prepare_resume_image(file_bytes, ext)
         if base64_image is None:
             st.error("Failed to process the uploaded file.")
@@ -144,7 +162,7 @@ def main():
                 st.error(extracted_resume_text)
             else:
                 st.success("Resume text extracted successfully!")
-                # Allow users to review and edit the extracted text
+                # Allow the user to edit the extracted text if needed.
                 extracted_resume_text = st.text_area("Extracted Resume Text (Edit if needed):",
                                                      value=extracted_resume_text, height=200)
     else:
@@ -159,24 +177,39 @@ def main():
     # --- Step 3: Generate Cover Letter ---
     if st.button("Generate Cover Letter"):
         if not extracted_resume_text.strip():
-            st.error(
-                "Resume text is missing. Ensure you have uploaded a valid resume file and that text extraction was successful.")
+            st.error("Resume text is missing. Please check your upload and extraction.")
         elif not job_description.strip():
             st.error("Job description is required.")
         else:
             with st.spinner("Generating your cover letter..."):
                 cover_letter = generate_cover_letter(extracted_resume_text, job_description, industry, tone)
+
             if cover_letter.startswith("Error"):
                 st.error(cover_letter)
             else:
-                st.success("Cover letter generated successfully!")
-                st.text_area("Your Generated Cover Letter:", cover_letter, height=300)
-                st.download_button(
-                    label="Download Cover Letter",
-                    data=cover_letter,
-                    file_name="cover_letter.txt",
-                    mime="text/plain",
-                )
+                # Display the cover letter in two tabs: Preview and Customize.
+                tab1, tab2 = st.tabs(["Preview", "Customize"])
+                with tab1:
+                    st.markdown("### Generated Cover Letter")
+                    if template_choice == "Modern":
+                        st.markdown(f"<div style='font-family:Arial, sans-serif;'>{cover_letter}</div>",
+                                    unsafe_allow_html=True)
+                    elif template_choice == "Creative":
+                        st.markdown(f"<div style='font-family:Georgia, serif; color:#4B0082;'>{cover_letter}</div>",
+                                    unsafe_allow_html=True)
+                    else:
+                        st.markdown(cover_letter)
+
+                with tab2:
+                    st.markdown("### Edit Your Cover Letter")
+                    edited_cover_letter = st.text_area("Cover Letter Editor", cover_letter, height=300)
+                    # Directly display the download button (no extra button click required)
+                    st.download_button(
+                        label="Download Edited Cover Letter",
+                        data=edited_cover_letter,
+                        file_name="cover_letter.txt",
+                        mime="text/plain"
+                    )
 
 
 if __name__ == "__main__":
